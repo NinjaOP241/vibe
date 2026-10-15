@@ -20,42 +20,29 @@ services:
       retries: 20
 
   temporal:
-    image: temporalio/auto-setup:1.27.3
+    image: temporalio/auto-setup:1.25.2
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
     environment:
       DB: postgres12
       DB_PORT: 5432
-      POSTGRES_USER: temporal
-      POSTGRES_PWD: temporal
+      POSTGRES_USER: postgres
+      POSTGRES_PWD: postgres
       POSTGRES_SEEDS: postgres
-      DBNAME: temporal
-      VISIBILITY_DBNAME: temporal_visibility
-      SKIP_DB_CREATE: "true"
-      BIND_ON_IP: 0.0.0.0
-      TEMPORAL_ADDRESS: 127.0.0.1:7233
     ports:
       - "7233:7233"
-    healthcheck:
-      test: ["CMD", "temporal", "operator", "cluster", "health"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-      start_period: 40s
 
   temporal-ui:
     image: temporalio/ui:2.34.0
     restart: unless-stopped
     depends_on:
-      temporal:
-        condition: service_healthy
+      - temporal
     environment:
       TEMPORAL_ADDRESS: temporal:7233
-      TEMPORAL_CORS_ORIGINS: http://localhost:8233,http://127.0.0.1:8233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000,http://localhost:5173
     ports:
-      - "8233:8080"
+      - "8080:8080"
 
 volumes:
   postgres-data:
