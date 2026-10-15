@@ -8,7 +8,15 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "npm run dev -w server"
+    "dev": "npm run dev -w server",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "prisma:format": "npx prisma format",
+    "prisma:migrate": "npx prisma migrate dev",
+    "prisma:generate": "npx prisma generate",
+    "prisma:all": "npm run prisma:format && npm run prisma:migrate && npm run prisma:generate",
+    "prisma:studio": "npx prisma studio"
   },
   "keywords": [],
   "author": "",
