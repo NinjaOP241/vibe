@@ -1,0 +1,17 @@
+{
+  "name": "vibe",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "server"
+  ],
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npm run dev -w server"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
