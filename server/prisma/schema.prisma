@@ -11,3 +11,53 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+enum MessageType {
+  RESULT
+  ERROR
+}
+
+model Project {
+  id        String    @id @default(cuid())
+  name      String
+  userId    String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  messages  Message[]
+
+  @@index([userId])
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  content   String
+  role      MessageRole
+  type      MessageType
+  projectId String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  fragments Fragment[]
+
+  @@index([projectId])
+}
+
+model Fragment {
+  id         String   @id @default(cuid())
+  title      String
+  sandboxUrl String
+  files      Json
+  messageId  String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+}
