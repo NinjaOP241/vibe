@@ -8,7 +8,9 @@
   ],
   "description": "",
   "main": "index.js",
-  "scripts": {},
+  "scripts": {
+    "dev": "npm run dev -w server"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC"
