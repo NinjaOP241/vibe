@@ -9,7 +9,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "npm run dev -w server"
+    "dev": "npm run dev -w server",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
   },
   "keywords": [],
   "author": "",
