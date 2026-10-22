@@ -9,6 +9,10 @@ const envSchema = z.object({
   API_PORT: z.coerce.number().int().positive().default(3001),
 
   DATABASE_URL: z.url(),
+
+  TEMPORAL_ADDRESS: z.string().default("localhost:7233"),
+  TEMPORAL_NAMESPACE: z.string().default("default"),
+  TEMPORAL_TASK_QUEUE: z.string().trim().min(1).default("coding-agent"),
 });
 
 const result = envSchema.safeParse(process.env);
