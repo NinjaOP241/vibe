@@ -9,6 +9,8 @@ import {
 import { messageService, projectService } from "../container.js";
 
 import type { SaveAssistantResultInput } from "../services/message.service.interface.js";
+import { runPlainPrompt } from "../lib/llm.js";
+import { FRAGMENT_TITLE_PROMPT, RESPONSE_PROMPT } from "../lib/prompt.js";
 
 /**
  * createSandbox is an activity that creates a sandbox for a given project ID,
@@ -46,4 +48,14 @@ export async function loadSandboxFiles(
   sandboxId: string,
 ): Promise<FileCollection> {
   return readSandboxTree(sandboxId);
+}
+
+export async function generateTitle(summary: string): Promise<string> {
+  const title = await runPlainPrompt(FRAGMENT_TITLE_PROMPT, summary);
+  return title;
+}
+
+export async function generateResponse(summary: string): Promise<string> {
+  const response = await runPlainPrompt(RESPONSE_PROMPT, summary);
+  return response;
 }

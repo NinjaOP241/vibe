@@ -6,6 +6,8 @@
   "types": "module",
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec tsx src/server.ts",
+    "dev:worker": "nodemon --watch src --ext ts --exec tsx src/temporal/worker.ts",
+    "dev:all": "concurrently -c \"magenta,yellow\" -n \"SERVER,WORKER\" \"npm run dev\" \"npm run dev:worker\"",
     "prisma:format": "npx prisma format",
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:generate": "npx prisma generate",
@@ -40,6 +42,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
+    "concurrently": "^10.0.6",
     "nodemon": "^3.1.14",
     "prisma": "^7.10.0",
     "tsx": "^4.23.15",
