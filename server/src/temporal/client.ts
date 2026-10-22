@@ -1,5 +1,6 @@
 import { env } from "../config/env.js";
 import { getTemporalClient, isTemporalHealthy } from "../config/temporal.js";
+import type { CodeAgentInput } from "./workflows.js";
 
 async function startWorkflow(
   workflowName: string,
@@ -53,6 +54,15 @@ export async function startPingWorkflow(name: string) {
     "pingWorkflow",
     `ping-${Date.now()}`,
     [name],
+    env.TEMPORAL_TASK_QUEUE,
+  );
+}
+
+export async function startCodeAgentWorkflow(input: CodeAgentInput) {
+  return startWorkflow(
+    "codeAgentWorkflow",
+    `code-agent-${Date.now()}`,
+    [input],
     env.TEMPORAL_TASK_QUEUE,
   );
 }

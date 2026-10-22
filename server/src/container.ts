@@ -9,9 +9,12 @@ import { MessageService } from "./services/message.service.js";
 import { MessageController } from "./controllers/message.controller.js";
 
 const projectRepository = new ProjectRepository(prisma);
-const projectService = new ProjectService(projectRepository);
+export const projectService = new ProjectService(projectRepository);
 export const projectController = new ProjectController(projectService);
 
 const messageRepository = new MessageRepository(prisma);
-const messageService = new MessageService(messageRepository, projectService);
+export const messageService = new MessageService(
+  messageRepository,
+  projectService,
+);
 export const messageController = new MessageController(messageService);
