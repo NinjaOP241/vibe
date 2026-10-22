@@ -1,8 +1,10 @@
 import type { PrismaClient } from "../../generated/prisma/client.js";
+import { MessageRole, MessageType } from "../../generated/prisma/enums.js";
 import type {
   CreateMessageRecordInput,
   IMessageRepository,
   MessageWithFragments,
+  SaveAssistantResultRecord,
 } from "./message.repository.interface.js";
 
 export class MessageRepository implements IMessageRepository {
@@ -27,6 +29,43 @@ export class MessageRepository implements IMessageRepository {
         content: input.content,
         role: input.role,
         type: input.type,
+      },
+      include: {
+        fragments: true,
+      },
+    });
+  }
+
+  async saveAssistantResult(
+    input: SaveAssistantResultRecord,
+  ): Promise<MessageWithFragments | null> {
+    if (input.isError) {
+      return this.prismaClient.message.create({
+        data: {
+          projectId: input.projectId,
+          content: input.content,
+          role: MessageRole.ASSISTANT,
+          type: MessageType.ERROR,
+        },
+        include: {
+          fragments: true,
+        },
+      });
+    }
+
+    return this.prismaClient.message.create({
+      data: {
+        projectId: input.projectId,
+        content: input.content,
+        role: MessageRole.ASSISTANT,
+        type: MessageType.RESULT,
+        fragments: {
+          create: {
+            title: input.title,
+            sandboxUrl: input.sandboxUrl,
+            files: input.files,
+          },
+        },
       },
       include: {
         fragments: true,
