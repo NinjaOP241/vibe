@@ -1,6 +1,10 @@
 import { ApplicationFailure } from "@temporalio/common";
 
-import { ensureSandbox } from "../lib/sandbox.js";
+import {
+  ensureSandbox,
+  type FileCollection,
+  readSandboxTree,
+} from "../lib/sandbox.js";
 
 import { messageService, projectService } from "../container.js";
 
@@ -36,4 +40,10 @@ export async function saveAssistantResult(input: SaveAssistantResultInput) {
   }
 
   return result;
+}
+
+export async function loadSandboxFiles(
+  sandboxId: string,
+): Promise<FileCollection> {
+  return readSandboxTree(sandboxId);
 }

@@ -10,6 +10,7 @@ import type {
   CreateProjectInput,
   IProjectService,
 } from "./project.service.interface.js";
+import { startCodeAgentWorkflow } from "../temporal/client.js";
 
 export class ProjectService implements IProjectService {
   constructor(private readonly projectRepository: IProjectRepository) {}
@@ -26,13 +27,23 @@ export class ProjectService implements IProjectService {
   }
 
   async createProject(input: CreateProjectInput): Promise<ProjectWithMessages> {
+    // Generate a random slug for the project name
     const name = generateSlug(3, { format: "kebab" });
 
-    const project = this.projectRepository.createWithInitialMessage({
+    // Create the project with the initial message in the database
+    const project = await this.projectRepository.createWithInitialMessage({
       name,
       userId: input.userId,
       messageContent: input.messageContent,
     });
+
+    // Start the code agent workflow
+    await startCodeAgentWorkflow({
+      projectId: project.id,
+      userId: input.userId,
+      prompt: input.messageContent,
+    });
+
     return project;
   }
 }
