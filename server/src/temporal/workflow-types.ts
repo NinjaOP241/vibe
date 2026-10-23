@@ -1,4 +1,5 @@
 import { TodoItem } from "../lib/plan.js";
+import { CodeAgentInput } from "./workflows.js";
 
 export interface WorkflowAgentMessage {
   role: "user" | "assistant" | "system";
@@ -17,6 +18,13 @@ export interface WorkflowPipelineState {
   planMessageId?: string;
 }
 
+export interface AgentBasePayload {
+  projectId: string;
+  sandboxId: string;
+  prompt: string;
+  state: WorkflowPipelineState;
+}
+
 export function emptyPipelineState(
   thread: WorkflowAgentMessage[],
 ): WorkflowPipelineState {
@@ -28,5 +36,17 @@ export function emptyPipelineState(
     buildNotes: "",
     review: "",
     summary: "",
+  };
+}
+
+export function createAgentBasePayload(
+  input: CodeAgentInput,
+  state: WorkflowPipelineState,
+): AgentBasePayload {
+  return {
+    projectId: input.projectId,
+    sandboxId: input.projectId,
+    prompt: input.prompt,
+    state,
   };
 }

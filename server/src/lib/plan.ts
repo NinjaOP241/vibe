@@ -1,14 +1,75 @@
-export type TodoStatus = "pending" | "in_progress" | "completed";
+export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
 
 export const statuses: readonly TodoStatus[] = [
   "pending",
   "in_progress",
   "completed",
+  "cancelled",
 ];
+
+export type TodoPhase = "design" | "build" | "review";
+
+const PHASE_INDEX: Record<TodoPhase, number> = {
+  design: 0,
+  build: 1,
+  review: 2,
+};
+
+// The planner must end each todo's content with an explicit phase tag.
+const PHASE_TAG_PATTERN = /\bphase\s*:\s*(design|build|review)\s*\.?\s*$/i;
+
+export function inferToDoPhase(content: string): TodoPhase {
+  const match = content.match(PHASE_TAG_PATTERN);
+  const phase = match?.[1]?.toLowerCase();
+
+  if (phase === "design" || phase === "build" || phase === "review") {
+    return phase;
+  }
+
+  throw new Error(`Todo content is missing a valid phase tag: "${content}"`);
+}
+
+/**
+ * A record of valid status transitions for a todo item.
+ * For example, a todo item can transition from "pending" to "in_progress",
+ * but it cannot transition from "completed" to "in_progress".
+ */
+const STATUS_TRANSITIONS: Record<TodoStatus, TodoStatus[]> = {
+  pending: ["in_progress", "completed", "cancelled"],
+  in_progress: ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+};
+
+/**
+ * Checks if a transition from one status to another is valid based on the STATUS_TRANSITIONS map.
+ * @param from The current status of the todo item.
+ * @param to The desired status of the todo item.
+ * @returns True if the transition is valid, false otherwise.
+ */
+export function canTransitionStatus(from: TodoStatus, to: TodoStatus): boolean {
+  if (from === to) return true;
+  return STATUS_TRANSITIONS[from].includes(to);
+}
+
+/**
+ * Transitions a todo item from one status to another.
+ * @param from The current status of the todo item.
+ * @param to The desired status of the todo item.
+ * @returns The new status of the todo item.
+ */
+export function transitionStatus(from: TodoStatus, to: TodoStatus): TodoStatus {
+  if (canTransitionStatus(from, to)) {
+    return to;
+  }
+
+  throw new Error(`Invalid status transition from "${from}" to "${to}".`);
+}
 
 export interface TodoItem {
   content: string;
   status: TodoStatus;
+  phase: TodoPhase;
 }
 
 // For example: PLAN_KING = "plan" | "brief_plan" | "detailed_plan"
@@ -49,9 +110,18 @@ export function normalizeTodos(value: unknown): TodoItem | null {
     return null;
   }
 
+  let phase: TodoPhase;
+
+  try {
+    phase = inferToDoPhase(content);
+  } catch {
+    return null;
+  }
+
   return {
     content: content.trim(),
     status: isTodoStatus(status) ? status : "pending",
+    phase,
   };
 }
 
