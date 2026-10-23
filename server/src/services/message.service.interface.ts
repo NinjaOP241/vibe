@@ -1,4 +1,5 @@
 import type { AgentChatMessage } from "../agents/types.js";
+import { PlanActivity, TodoItem } from "../lib/plan.js";
 import type { FileCollection } from "../lib/sandbox.js";
 import type { MessageWithFragments } from "../repositories/message.repository.interface.js";
 
@@ -25,6 +26,13 @@ export type SaveAssistantResultInput =
       files: FileCollection;
     };
 
+export interface SavePlanMessageInput {
+  projectId: string;
+  messageId: string | null;
+  todos: TodoItem[];
+  activity: PlanActivity | null;
+}
+
 export interface IMessageService {
   loadRecentMessagesForAgent(
     projectId: string,
@@ -43,4 +51,6 @@ export interface IMessageService {
   saveAssistantResult(
     input: SaveAssistantResultInput,
   ): Promise<MessageWithFragments | null>;
+
+  savePlanMessage(input: SavePlanMessageInput): Promise<MessageWithFragments>;
 }

@@ -38,6 +38,12 @@ export type SaveAssistantResultRecord =
       files: FileCollection;
     };
 
+export interface UpdateMessageContentInput {
+  messageId: string;
+  projectId: string;
+  content: string;
+}
+
 export interface IMessageRepository {
   findRecentByProjectId(projectId: string, limit: number): Promise<Message[]>;
 
@@ -48,4 +54,8 @@ export interface IMessageRepository {
   saveAssistantResult(
     input: SaveAssistantResultRecord,
   ): Promise<MessageWithFragments | null>;
+
+  updateMessageContent(
+    input: UpdateMessageContentInput,
+  ): Promise<MessageWithFragments>;
 }

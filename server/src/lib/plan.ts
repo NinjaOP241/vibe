@@ -202,3 +202,23 @@ export function parsePlanMessage(content: string): TodoItem[] | null {
 
   return todos.length > 0 ? todos : null;
 }
+
+/**
+ * serializePlanMessage() takes a list of TodoItems and an optional PlanActivity
+ * and returns a stringified PlanMessage that can be stored in the database.
+ */
+export function serializePlanMessage(
+  todos: TodoItem[],
+  activity?: PlanActivity | null,
+): string {
+  const payload: PlanMessage = {
+    todos,
+    kind: PLAN_KIND,
+  };
+
+  if (activity) {
+    payload.activity = activity;
+  }
+
+  return JSON.stringify(payload);
+}

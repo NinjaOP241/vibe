@@ -5,27 +5,11 @@ import type {
   IMessageRepository,
   MessageWithFragments,
   SaveAssistantResultRecord,
+  UpdateMessageContentInput,
 } from "./message.repository.interface.js";
 
 export class MessageRepository implements IMessageRepository {
   constructor(private readonly prismaClient: PrismaClient) {}
-
-  /**
-   * Fetches the most recent messages for a project.
-   * The database returns them newest first.
-   */
-  async findRecentByProjectId(
-    projectId: string,
-    limit: number,
-  ): Promise<Message[]> {
-    return this.prismaClient.message.findMany({
-      where: {
-        projectId,
-      },
-      orderBy: { createdAt: "desc" },
-      take: limit,
-    });
-  }
 
   async findByProjectId(projectId: string): Promise<MessageWithFragments[]> {
     return this.prismaClient.message.findMany({
@@ -83,6 +67,40 @@ export class MessageRepository implements IMessageRepository {
             files: input.files,
           },
         },
+      },
+      include: {
+        fragments: true,
+      },
+    });
+  }
+
+  /**
+   * Fetches the most recent messages for a project.
+   * The database returns them newest first.
+   */
+  async findRecentByProjectId(
+    projectId: string,
+    limit: number,
+  ): Promise<Message[]> {
+    return this.prismaClient.message.findMany({
+      where: {
+        projectId,
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+  }
+
+  async updateMessageContent(
+    input: UpdateMessageContentInput,
+  ): Promise<MessageWithFragments> {
+    return this.prismaClient.message.update({
+      where: {
+        id: input.messageId,
+        projectId: input.projectId,
+      },
+      data: {
+        content: input.content,
       },
       include: {
         fragments: true,

@@ -6,40 +6,22 @@ import type {
   CreateMessageInput,
   IMessageService,
   SaveAssistantResultInput,
+  SavePlanMessageInput,
 } from "./message.service.interface.js";
 
 import type { MessageWithFragments } from "../repositories/message.repository.interface.js";
 import { AgentChatMessage } from "../agents/types.js";
-import { formatPlanForAgent, parsePlanMessage } from "../lib/plan.js";
+import {
+  formatPlanForAgent,
+  parsePlanMessage,
+  serializePlanMessage,
+} from "../lib/plan.js";
 
 export class MessageService implements IMessageService {
   constructor(
     private readonly messageRepository: IMessageRepository,
     private readonly projectService: IProjectService,
   ) {}
-
-  /**
-   * Loads recent conversation history and converts it into the
-   * message format expected by our AI agents.
-   */
-  async loadRecentMessagesForAgent(
-    projectId: string,
-    limit: number = 5,
-  ): Promise<AgentChatMessage[]> {
-    const messages = await this.messageRepository.findRecentByProjectId(
-      projectId,
-      limit,
-    );
-
-    // The query returned newest first. Restore conversation order.
-    return messages.reverse().map((message) => ({
-      role: message.role === MessageRole.USER ? "user" : "assistant",
-
-      // Convert stored plan JSON into readable plan context.
-      // Leave ordinary chat content unchanged.
-      content: this.formatMessageContentForAgent(message.content),
-    }));
-  }
 
   async getMessagesByProjectId(
     projectId: string,
@@ -101,6 +83,53 @@ export class MessageService implements IMessageService {
       title: input.title,
       sandboxUrl: input.sandboxUrl,
       files: input.files,
+    });
+  }
+
+  /**
+   * Loads recent conversation history and converts it into the
+   * message format expected by our AI agents.
+   */
+  async loadRecentMessagesForAgent(
+    projectId: string,
+    limit: number = 5,
+  ): Promise<AgentChatMessage[]> {
+    const messages = await this.messageRepository.findRecentByProjectId(
+      projectId,
+      limit,
+    );
+
+    // The query returned newest first. Restore conversation order.
+    return messages.reverse().map((message) => ({
+      role: message.role === MessageRole.USER ? "user" : "assistant",
+
+      // Convert stored plan JSON into readable plan context.
+      // Leave ordinary chat content unchanged.
+      content: this.formatMessageContentForAgent(message.content),
+    }));
+  }
+
+  async savePlanMessage(
+    input: SavePlanMessageInput,
+  ): Promise<MessageWithFragments> {
+    // Serialize the plan message to a stringified PlanMessage that can be stored in the database
+    const content = serializePlanMessage(input.todos, input.activity);
+
+    // If we already have a messageId, update the existing message
+    if (input.messageId) {
+      return this.messageRepository.updateMessageContent({
+        messageId: input.messageId,
+        projectId: input.projectId,
+        content,
+      });
+    }
+
+    // Otherwise, create a new plan message
+    return this.messageRepository.create({
+      projectId: input.projectId,
+      content,
+      role: MessageRole.ASSISTANT,
+      type: MessageType.RESULT,
     });
   }
 
