@@ -7,15 +7,16 @@ export async function runPlainPrompt(
   userPrompt: string,
 ): Promise<string> {
   const model = getChatModel(env.GEMINI_MODEL);
+
   const response = await model.invoke([
     new SystemMessage(systemPrompt),
     new HumanMessage(userPrompt),
   ]);
-  const { content } = response;
+  const content = response.text.trim();
 
-  if (typeof content !== "string" || !content.trim()) {
+  if (!content) {
     throw new Error("Invalid response from LLM: empty or non-string content");
   }
 
-  return content.trim();
+  return content;
 }
