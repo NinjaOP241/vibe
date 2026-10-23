@@ -59,3 +59,6 @@ export async function generateResponse(summary: string): Promise<string> {
   const response = await runPlainPrompt(RESPONSE_PROMPT, summary);
   return response;
 }
+
+export { runPlannerActivity } from "./agent-activities.js";
+export { savePlanActivity } from "./plan-activities.js";

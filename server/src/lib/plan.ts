@@ -9,6 +9,14 @@ export const statuses: readonly TodoStatus[] = [
 
 export type TodoPhase = "design" | "build" | "review";
 
+export type PhaseStatusAction = "start" | "complete" | "cancel";
+
+const STATUS_FOR_PHASE_ACTION: Record<PhaseStatusAction, TodoStatus> = {
+  start: "in_progress",
+  complete: "completed",
+  cancel: "cancelled",
+} as const;
+
 const PHASE_INDEX: Record<TodoPhase, number> = {
   design: 0,
   build: 1,
@@ -64,6 +72,32 @@ export function transitionStatus(from: TodoStatus, to: TodoStatus): TodoStatus {
   }
 
   throw new Error(`Invalid status transition from "${from}" to "${to}".`);
+}
+
+/**
+ * Updates the status of all todos in a given phase based on the specified action.
+ * @param todos The list of todos to update.
+ * @param phase The phase for which to update the todos.
+ * @param action The action to perform on the todos in the specified phase.
+ * @returns A new list of todos with updated statuses for the specified phase.
+ */
+export function updateTodoStatusForPhase(
+  todos: TodoItem[],
+  phase: TodoPhase,
+  action: PhaseStatusAction,
+): TodoItem[] {
+  const nextStatus = STATUS_FOR_PHASE_ACTION[action];
+
+  return todos.map((todo) => {
+    if (todo.phase !== phase) {
+      return todo;
+    }
+
+    return {
+      ...todo,
+      status: transitionStatus(todo.status, nextStatus),
+    };
+  });
 }
 
 export interface TodoItem {
