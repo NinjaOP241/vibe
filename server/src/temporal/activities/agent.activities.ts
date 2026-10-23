@@ -1,7 +1,10 @@
 import { cancellationSignal, heartbeat } from "@temporalio/activity";
-import type { AgentBasePayload, WorkflowPipelineState } from "./workflow-types";
-import { runPlanner } from "../agents/planner/run";
-import { persistPlanMessage } from "./plan-activities.js";
+import type {
+  AgentBasePayload,
+  WorkflowPipelineState,
+} from "../workflows/workflow-types.js";
+import { runPlanner } from "../../agents/planner/run";
+import { persistPlanMessage } from "./plan.activities.js";
 
 const HEARTBEAT_INTERVAL_MS = 5_000;
 

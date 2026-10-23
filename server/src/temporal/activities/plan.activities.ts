@@ -1,5 +1,5 @@
-import { messageService } from "../container.js";
-import type { PlanActivity, TodoItem } from "../lib/plan.js";
+import { messageService } from "../../container.js";
+import type { PlanActivity, TodoItem } from "../../lib/plan.js";
 
 export interface SavePlanActivityInput {
   projectId: string;

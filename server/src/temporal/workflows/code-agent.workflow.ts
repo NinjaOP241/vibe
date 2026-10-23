@@ -1,12 +1,13 @@
 import { proxyActivities } from "@temporalio/workflow";
 
-import type * as activities from "./activities.js";
+import type * as activities from "../activities/activities.js";
 import {
+  CodeAgentInput,
   emptyPipelineState,
   WorkflowAgentMessage,
   WorkflowPipelineState,
 } from "./workflow-types.js";
-import { updateTodoStatusForPhase } from "../lib/plan.js";
+import { updateTodoStatusForPhase } from "../../lib/plan.js";
 
 const {
   createSandbox,
@@ -21,12 +22,6 @@ const {
     maximumAttempts: 3,
   },
 });
-
-export interface CodeAgentInput {
-  projectId: string;
-  userId: string;
-  prompt: string;
-}
 
 export async function pingWorkflow(name: string): Promise<string> {
   return `Hello, ${name}! The ping workflow has been successfully executed.`;

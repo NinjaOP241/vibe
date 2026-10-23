@@ -4,13 +4,13 @@ import {
   ensureSandbox,
   type FileCollection,
   readSandboxTree,
-} from "../lib/sandbox.js";
+} from "../../lib/sandbox.js";
 
-import { messageService, projectService } from "../container.js";
+import { messageService, projectService } from "../../container.js";
 
-import type { SaveAssistantResultInput } from "../services/message.service.interface.js";
-import { runPlainPrompt } from "../lib/llm.js";
-import { FRAGMENT_TITLE_PROMPT, RESPONSE_PROMPT } from "../lib/prompt.js";
+import type { SaveAssistantResultInput } from "../../services/message.service.interface.js";
+import { runPlainPrompt } from "../../lib/llm.js";
+import { FRAGMENT_TITLE_PROMPT, RESPONSE_PROMPT } from "../../lib/prompt.js";
 
 /**
  * createSandbox is an activity that creates a sandbox for a given project ID,
@@ -60,5 +60,5 @@ export async function generateResponse(summary: string): Promise<string> {
   return response;
 }
 
-export { runPlannerActivity } from "./agent-activities.js";
-export { savePlanActivity } from "./plan-activities.js";
+export { runPlannerActivity } from "./agent.activities.js";
+export { savePlanActivity } from "./plan.activities.js";

@@ -1,6 +1,6 @@
 import { env } from "../config/env.js";
 import { getTemporalClient, isTemporalHealthy } from "../config/temporal.js";
-import type { CodeAgentInput } from "./workflows.js";
+import type { CodeAgentInput } from "./workflows/workflow-types.js";
 
 async function startWorkflow(
   workflowName: string,

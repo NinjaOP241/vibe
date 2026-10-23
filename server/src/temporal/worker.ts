@@ -1,7 +1,7 @@
 import { NativeConnection, Worker } from "@temporalio/worker";
 
 import { env } from "../config/env.js";
-import * as activities from "./activities.js";
+import * as activities from "./activities/activities.js";
 import { backOff } from "exponential-backoff";
 
 async function main() {
@@ -37,7 +37,7 @@ async function main() {
     connection,
     namespace: env.TEMPORAL_NAMESPACE,
     taskQueue: env.TEMPORAL_TASK_QUEUE,
-    workflowsPath: require.resolve("./workflows"),
+    workflowsPath: require.resolve("./workflows/index.js"),
     activities,
   });
 
