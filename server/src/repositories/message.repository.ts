@@ -1,4 +1,4 @@
-import type { PrismaClient } from "../../generated/prisma/client.js";
+import type { Message, PrismaClient } from "../../generated/prisma/client.js";
 import { MessageRole, MessageType } from "../../generated/prisma/enums.js";
 import type {
   CreateMessageRecordInput,
@@ -9,6 +9,23 @@ import type {
 
 export class MessageRepository implements IMessageRepository {
   constructor(private readonly prismaClient: PrismaClient) {}
+
+  /**
+   * Fetches the most recent messages for a project.
+   * The database returns them newest first.
+   */
+  async findRecentByProjectId(
+    projectId: string,
+    limit: number,
+  ): Promise<Message[]> {
+    return this.prismaClient.message.findMany({
+      where: {
+        projectId,
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+  }
 
   async findByProjectId(projectId: string): Promise<MessageWithFragments[]> {
     return this.prismaClient.message.findMany({

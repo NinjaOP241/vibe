@@ -1,4 +1,5 @@
-import { FileCollection } from "../lib/sandbox.js";
+import type { AgentChatMessage } from "../agents/types.js";
+import type { FileCollection } from "../lib/sandbox.js";
 import type { MessageWithFragments } from "../repositories/message.repository.interface.js";
 
 export interface CreateMessageInput {
@@ -25,6 +26,11 @@ export type SaveAssistantResultInput =
     };
 
 export interface IMessageService {
+  loadRecentMessagesForAgent(
+    projectId: string,
+    limit: number,
+  ): Promise<AgentChatMessage[]>;
+
   getMessagesByProjectId(
     projectId: string,
     userId: string,

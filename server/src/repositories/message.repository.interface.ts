@@ -1,4 +1,5 @@
 import type {
+  Message,
   MessageRole,
   MessageType,
   Prisma,
@@ -38,6 +39,8 @@ export type SaveAssistantResultRecord =
     };
 
 export interface IMessageRepository {
+  findRecentByProjectId(projectId: string, limit: number): Promise<Message[]>;
+
   findByProjectId(projectId: string): Promise<MessageWithFragments[]>;
 
   create(input: CreateMessageRecordInput): Promise<MessageWithFragments>;

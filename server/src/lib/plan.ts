@@ -1,5 +1,11 @@
 export type TodoStatus = "pending" | "in_progress" | "completed";
 
+export const statuses: readonly TodoStatus[] = [
+  "pending",
+  "in_progress",
+  "completed",
+];
+
 export interface TodoItem {
   content: string;
   status: TodoStatus;
@@ -21,4 +27,108 @@ export interface PlanMessage {
   todos: TodoItem[];
   kind: typeof PLAN_KIND;
   activity?: PlanActivity;
+}
+
+function isTodoStatus(value: unknown): value is TodoStatus {
+  return (
+    typeof value === "string" && (statuses as readonly string[]).includes(value)
+  );
+}
+
+/**
+ * Converts any messy json object into a clean TodoItem
+ */
+export function normalizeTodos(value: unknown): TodoItem | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const { content, status } = value as { content?: unknown; status?: unknown };
+
+  if (typeof content !== "string" || !content.trim()) {
+    return null;
+  }
+
+  return {
+    content: content.trim(),
+    status: isTodoStatus(status) ? status : "pending",
+  };
+}
+
+/**
+ * Converts a array of messy json objects into a clean array of TodoItems
+ */
+export function parseTodos(value: unknown): TodoItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => normalizeTodos(item))
+    .filter((item): item is TodoItem => Boolean(item)); // Exclude null values from the result
+}
+
+/**
+ * Converts a list of TodoItems into a formatted string that can be send to the agents
+ * to have the context about the entire plan
+ */
+export function formatPlanForAgent(todos: TodoItem[]): string {
+  const planLines = todos.map(
+    (todo, index) => `${index + 1}. [${todo.status}] ${todo.content}`,
+  );
+
+  const footer =
+    "Follow this plan in order. Update it with write_todos as you complete steps.";
+
+  return ["Current plan:", ...planLines, "", footer].join("\n");
+}
+
+/**
+ * parsePlanMessage() takes a string from a database message and
+ * checks whether that string contains a saved plan.
+ * If it does, it returns the plan’s todos as TodoItem[].
+ * If the string is invalid JSON, is not marked as a plan, or
+ * contains no valid todos, it returns null.
+ *
+ * For example, given this database message content:
+ *  const content = `{
+ *    "kind": "plan",
+ *    "todos": [
+ *      {
+ *        "content": "Build the hero section. Phase: build",
+ *        "status": "pending",
+ *        "phase": "build"
+ *      }
+ *    ],
+ *    "activity": {
+ *      "agent": "planner",
+ *      "detail": "Plan created"
+ *    }
+ *  }`;
+ *
+ * The function returns:
+ *  [
+ *    {
+ *      content: "Build the hero section. Phase: build",
+ *      status: "pending",
+ *      phase: "build"
+ *    }
+ *  ]
+ */
+export function parsePlanMessage(content: string): TodoItem[] | null {
+  let parsed: Partial<PlanMessage>;
+
+  try {
+    parsed = JSON.parse(content) as Partial<PlanMessage>;
+  } catch {
+    return null;
+  }
+
+  if (parsed.kind !== PLAN_KIND) {
+    return null;
+  }
+
+  const todos = parseTodos(parsed.todos);
+
+  return todos.length > 0 ? todos : null;
 }
