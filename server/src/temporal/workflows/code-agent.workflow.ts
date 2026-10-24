@@ -2,6 +2,7 @@ import { proxyActivities } from "@temporalio/workflow";
 import type * as activities from "../activities/index.js";
 
 import {
+  createAgentBasePayload,
   emptyPipelineState,
   type CodeAgentInput,
   type WorkflowPipelineState,
@@ -35,22 +36,33 @@ export async function codeAgentWorkflow(input: CodeAgentInput) {
     userId: input.userId,
   });
 
+  // Load the recent messages for the agent to provide context for the workflow
   const previousMessages = await loadRecentMessagesForAgent({
     projectId: input.projectId,
     limit: 5,
   });
 
-  const thread: AgentChatMessage[] = [{ role: "user", content: input.prompt }];
+  // Build the conversation history and ensure the current prompt
+  // appears exactly once at the end.
+  const thread: AgentChatMessage[] = [...previousMessages];
+
+  const lastMessage = thread.at(-1);
+  const currentPromptAlreadyInThread =
+    lastMessage?.role === "user" &&
+    lastMessage.content.trim() === input.prompt.trim();
+
+  // If the current prompt is not already in the thread, add it as a new user message.
+  if (!currentPromptAlreadyInThread) {
+    thread.push({
+      role: "user",
+      content: input.prompt,
+    });
+  }
 
   let state: WorkflowPipelineState = emptyPipelineState(thread);
 
   // Run the planner activity to generate todos and update the workflow state
-  state = await runPlannerActivity({
-    projectId: input.projectId,
-    sandboxId,
-    prompt: input.prompt,
-    state,
-  });
+  state = await runPlannerActivity(createAgentBasePayload(input, state));
 
   // Update the status of todos in the "design" phase to "in_progress" before calling the design agent
   state.todos = updateTodoStatusForPhase(state.todos, "design", "start");
