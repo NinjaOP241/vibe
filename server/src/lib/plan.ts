@@ -256,3 +256,58 @@ export function serializePlanMessage(
 
   return JSON.stringify(payload);
 }
+
+/**
+ * Creates a deterministic fallback plan when the planner agent fails to return
+ * a usable plan. It can also be used in unit tests to verify todo processing,
+ * phase classification, and status updates without depending on an LLM.
+ *
+ * This is a generic baseline plan; successful planner responses should provide
+ * a more specific plan tailored to the user's request.
+ */
+export function defaultPlan(prompt: string): TodoItem[] {
+  const request = prompt.trim() || "the requested app";
+
+  return [
+    {
+      content: `Define the core requirements, target user flow, and information architecture for ${request}. Identify the main screens and the content each screen needs. Phase: design`,
+      status: "pending",
+      phase: "design",
+    },
+    {
+      content:
+        "Design the visual identity, color palette, typography, spacing, and component plan. Map the required files and reusable UI components under src/components. Phase: design",
+      status: "pending",
+      phase: "design",
+    },
+    {
+      content:
+        "Scaffold the React + Tailwind interface in src/App.tsx and create the necessary component files with named exports and a default-exported root component. Phase: build",
+      status: "pending",
+      phase: "build",
+    },
+    {
+      content: `Implement the main screens and reusable UI components with product-specific copy, static/local data, and a clear visual hierarchy tailored to ${request}. Phase: build`,
+      status: "pending",
+      phase: "build",
+    },
+    {
+      content:
+        "Build the main user interactions using local state and event handlers. Implement appropriate empty, success, and error states for the primary user flows using static/local data. Phase: build",
+      status: "pending",
+      phase: "build",
+    },
+    {
+      content:
+        "Polish the interface with Tailwind styling, responsive layouts, mobile-friendly touch targets, consistent spacing, and useful lucide-react icons where appropriate. Phase: build",
+      status: "pending",
+      phase: "build",
+    },
+    {
+      content:
+        "Review accessibility, interaction behavior, responsive edge cases, and TypeScript issues. Verify the preview and fix any reported bundle errors before considering the app ready for export. Phase: review",
+      status: "pending",
+      phase: "review",
+    },
+  ];
+}
