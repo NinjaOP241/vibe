@@ -162,7 +162,7 @@ export function normalizeTodos(value: unknown): TodoItem | null {
 /**
  * Converts a array of messy json objects into a clean array of TodoItems
  */
-export function parseTodos(value: unknown): TodoItem[] {
+export function parsePlannerTodos(value: unknown): TodoItem[] {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -232,7 +232,7 @@ export function parsePlanMessage(content: string): TodoItem[] | null {
     return null;
   }
 
-  const todos = parseTodos(parsed.todos);
+  const todos = parsePlannerTodos(parsed.todos);
 
   return todos.length > 0 ? todos : null;
 }

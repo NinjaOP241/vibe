@@ -1,4 +1,4 @@
-import { TodoItem } from "../lib/plan.js";
+import { PlanActivity, TodoItem } from "../lib/plan.js";
 
 export interface AgentChatMessage {
   role: "user" | "assistant" | "system";
@@ -9,7 +9,7 @@ export interface AgentRunHooks {
   onProgress?: () => void;
   onTodos?: (
     todos: TodoItem[],
-    activity?: { agent: string; detail: string } | null,
+    activity?: PlanActivity | null,
   ) => Promise<void>;
   signal?: AbortSignal;
 }
