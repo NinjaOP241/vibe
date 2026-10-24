@@ -1,7 +1,7 @@
 import { NativeConnection, Worker } from "@temporalio/worker";
 
 import { env } from "../config/env.js";
-import * as activities from "./activities/activities.js";
+import * as activities from "./activities/index.js";
 import { backOff } from "exponential-backoff";
 
 async function main() {

@@ -10,9 +10,7 @@ const HEARTBEAT_INTERVAL_MS = 5_000;
 
 type Beat = () => void;
 
-export async function withHeartbeat<T>(
-  run: (beat: Beat) => Promise<T>,
-): Promise<T> {
+async function withHeartbeat<T>(run: (beat: Beat) => Promise<T>): Promise<T> {
   const beat: Beat = () => {
     try {
       heartbeat();

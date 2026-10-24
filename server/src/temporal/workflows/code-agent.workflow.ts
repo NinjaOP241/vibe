@@ -1,16 +1,17 @@
 import { proxyActivities } from "@temporalio/workflow";
+import type * as activities from "../activities/index.js";
 
-import type * as activities from "../activities/activities.js";
 import {
-  CodeAgentInput,
   emptyPipelineState,
-  WorkflowAgentMessage,
-  WorkflowPipelineState,
+  type CodeAgentInput,
+  type WorkflowPipelineState,
 } from "./workflow-types.js";
 import { updateTodoStatusForPhase } from "../../lib/plan.js";
+import type { AgentChatMessage } from "../../agents/types.js";
 
 const {
   createSandbox,
+  loadRecentMessagesForAgent,
   saveAssistantResult,
   generateTitle,
   generateResponse,
@@ -34,9 +35,12 @@ export async function codeAgentWorkflow(input: CodeAgentInput) {
     userId: input.userId,
   });
 
-  const thread: WorkflowAgentMessage[] = [
-    { role: "user", content: input.prompt },
-  ];
+  const previousMessages = await loadRecentMessagesForAgent({
+    projectId: input.projectId,
+    limit: 5,
+  });
+
+  const thread: AgentChatMessage[] = [{ role: "user", content: input.prompt }];
 
   let state: WorkflowPipelineState = emptyPipelineState(thread);
 

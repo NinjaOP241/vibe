@@ -1,14 +1,10 @@
+import type { AgentChatMessage } from "../../agents/types.js";
 import { TodoItem } from "../../lib/plan.js";
-
-export interface WorkflowAgentMessage {
-  role: "user" | "assistant" | "system";
-  content: string;
-}
 
 // This message will be passed between activities (actual agents) of the workflow
 export interface WorkflowPipelineState {
   todos: TodoItem[];
-  thread: WorkflowAgentMessage[];
+  thread: AgentChatMessage[];
   files: Record<string, string>;
   design: string;
   buildNotes: string;
@@ -31,7 +27,7 @@ export interface CodeAgentInput {
 }
 
 export function emptyPipelineState(
-  thread: WorkflowAgentMessage[],
+  thread: AgentChatMessage[],
 ): WorkflowPipelineState {
   return {
     todos: [],
