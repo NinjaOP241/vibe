@@ -5,6 +5,7 @@ import type {
 } from "../workflows/workflow-types.js";
 import { runPlanner } from "../../agents/planner/run.js";
 import { persistPlanMessage } from "./plan.activities.js";
+import { runDesigner } from "../../agents/designer/run.js";
 
 const HEARTBEAT_INTERVAL_MS = 5_000;
 
@@ -60,6 +61,56 @@ export async function runPlannerActivity(
 
     state.thread = result.thread;
     // state.todos = result.todos;
+
+    return state;
+  });
+}
+
+export async function runDesignerActivity(
+  input: AgentBasePayload,
+): Promise<WorkflowPipelineState> {
+  return withHeartbeat(async (beat) => {
+    const state = { ...input.state };
+
+    await persistPlanMessage({
+      projectId: input.projectId,
+      messageId: state.planMessageId,
+      todos: state.todos,
+      activity: {
+        agent: "designer",
+        detail: "designing the ui",
+      },
+    });
+
+    const result = await runDesigner({
+      prompt: input.prompt,
+      todos: state.todos,
+      thread: state.thread,
+      signal: cancellationSignal(),
+      onProgress: beat,
+      onTodos: async (todos, activity) => {
+        state.planMessageId = await persistPlanMessage({
+          projectId: input.projectId,
+          messageId: state.planMessageId,
+          todos,
+          activity,
+        });
+        beat();
+      },
+    });
+
+    state.thread = result.thread;
+    state.design = result.design;
+
+    await persistPlanMessage({
+      projectId: input.projectId,
+      messageId: state.planMessageId,
+      todos: state.todos,
+      activity: {
+        agent: "designer",
+        detail: "design completed.",
+      },
+    });
 
     return state;
   });

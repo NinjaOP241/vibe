@@ -28,6 +28,7 @@ export interface PlannerResult {
 
 export interface DesignerInput extends AgentRunHooks {
   prompt: string;
+  todos: TodoItem[];
   thread: AgentChatMessage[];
 }
 

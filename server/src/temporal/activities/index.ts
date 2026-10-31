@@ -10,3 +10,5 @@ export { generateTitle, generateResponse } from "./llm.activities.js";
 export { runPlannerActivity } from "./agent.activities.js";
 
 export { savePlanActivity } from "./plan.activities.js";
+
+export { runDesignerActivity } from "./agent.activities.js";

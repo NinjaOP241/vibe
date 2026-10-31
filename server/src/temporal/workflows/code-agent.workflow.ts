@@ -18,6 +18,7 @@ const {
   generateResponse,
   savePlanActivity,
   runPlannerActivity,
+  runDesignerActivity,
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: "10 minutes",
   retry: {
@@ -79,32 +80,28 @@ export async function codeAgentWorkflow(input: CodeAgentInput) {
     },
   });
 
-  // TODO: Implement the design agent activity and update the workflow state accordingly.
-  /**
-   *
-   * state = await runDesignerActivity({
-   *   projectId: input.projectId,
-   *   sandboxId,
-   *   prompt: input.prompt,
-   *   state,
-   * });
-   *
-   * state.todos = updateTodoStatusForPhase(
-   *   state.todos,
-   *   "design",
-   *   "complete",
-   * );
-   *
-   * state.planMessageId = await savePlanActivity({
-   *   projectId: input.projectId,
-   *   messageId: state.planMessageId ?? null,
-   *   todos: state.todos,
-   *   activity: {
-   *     agent: "designer",
-   *     detail: "Handoff to builder",
-   *   },
-   * });
-   */
+  state = await runDesignerActivity({
+    projectId: input.projectId,
+    sandboxId,
+    prompt: input.prompt,
+    state,
+  });
+
+  state.todos = updateTodoStatusForPhase(state.todos, "design", "complete");
+
+  state.todos = updateTodoStatusForPhase(state.todos, "build", "start");
+
+  state.planMessageId = await savePlanActivity({
+    projectId: input.projectId,
+    messageId: state.planMessageId ?? null,
+    todos: state.todos,
+    activity: {
+      agent: "designer",
+      detail: "Handoff to builder",
+    },
+  });
+
+  // TODO: Implement the builder agent activity and update the workflow state accordingly.
 
   /**
    * DUMMY IMPLEMENTATION FOR NOW:
