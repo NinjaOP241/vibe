@@ -19,6 +19,7 @@ const {
   savePlanActivity,
   runPlannerActivity,
   runDesignerActivity,
+  runBuilderActivity,
 } = proxyActivities<typeof activities>({
   startToCloseTimeout: "10 minutes",
   retry: {
@@ -80,12 +81,7 @@ export async function codeAgentWorkflow(input: CodeAgentInput) {
     },
   });
 
-  state = await runDesignerActivity({
-    projectId: input.projectId,
-    sandboxId,
-    prompt: input.prompt,
-    state,
-  });
+  state = await runDesignerActivity(createAgentBasePayload(input, state));
 
   state.todos = updateTodoStatusForPhase(state.todos, "design", "complete");
 
@@ -101,7 +97,24 @@ export async function codeAgentWorkflow(input: CodeAgentInput) {
     },
   });
 
-  // TODO: Implement the builder agent activity and update the workflow state accordingly.
+  state = await runBuilderActivity({
+    ...createAgentBasePayload(input, state),
+    task: "Build the full React + Tailwind app from the design document and complete every build-phase step in the planner checklist.",
+  });
+
+  state.todos = updateTodoStatusForPhase(state.todos, "build", "complete");
+
+  state.todos = updateTodoStatusForPhase(state.todos, "review", "start");
+
+  state.planMessageId = await savePlanActivity({
+    projectId: input.projectId,
+    messageId: state.planMessageId ?? null,
+    todos: state.todos,
+    activity: {
+      agent: "builder",
+      detail: "Handoff to reviewer",
+    },
+  });
 
   /**
    * DUMMY IMPLEMENTATION FOR NOW:

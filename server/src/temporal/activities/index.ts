@@ -12,3 +12,5 @@ export { runPlannerActivity } from "./agent.activities.js";
 export { savePlanActivity } from "./plan.activities.js";
 
 export { runDesignerActivity } from "./agent.activities.js";
+
+export { runBuilderActivity } from "./agent.activities.js";

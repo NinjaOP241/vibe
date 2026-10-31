@@ -7,7 +7,7 @@ export interface WorkflowPipelineState {
   thread: AgentChatMessage[];
   files: Record<string, string>;
   design: string;
-  buildNotes: string;
+  builderNotes: string;
   review: string;
   summary: string;
   planMessageId?: string;
@@ -34,7 +34,7 @@ export function emptyPipelineState(
     thread,
     files: {},
     design: "",
-    buildNotes: "",
+    builderNotes: "",
     review: "",
     summary: "",
   };

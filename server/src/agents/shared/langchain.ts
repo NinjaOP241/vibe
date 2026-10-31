@@ -155,3 +155,22 @@ export function lastAssistantText(messages: readonly BaseMessage[]): string {
 
   return "";
 }
+
+export function isRecursionLimitExceeded(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) {
+    return false;
+  }
+
+  const record = error as {
+    message?: unknown;
+    lc_error_code?: unknown;
+    name?: unknown;
+  };
+
+  return (
+    (typeof record.message === "string" &&
+      record.message.includes("Recursion limit exceeded")) ||
+    record.lc_error_code === "GRAPH_RECURSION_LIMIT" ||
+    record.name === "GraphRecursionError"
+  );
+}
