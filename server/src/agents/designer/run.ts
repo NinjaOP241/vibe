@@ -12,7 +12,7 @@ import { formatDesignStepsForDesignerAgent } from "./format-design-steps.js";
 export async function runDesigner(
   input: DesignerInput,
 ): Promise<DesignerResult> {
-  // Create the planner agent
+  // Create the designer agent
   const agent = createAgent({
     name: "designer",
     model: getChatModel(env.GEMINI_DESIGNER_MODEL),
