@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import type { IProjectService } from "../services/project.service.interface.js";
 import { badRequest, notFound } from "../utils/api-error.js";
 import { sendSuccess } from "../utils/api-response.js";
+import { compileSandbox } from "../lib/sandbox.js";
 
 export class ProjectController {
   constructor(private readonly projectService: IProjectService) {}
@@ -30,6 +31,24 @@ export class ProjectController {
     }
 
     sendSuccess(res, project);
+  }
+
+  async previewProject(req: Request, res: Response): Promise<void> {
+    const userId = req.auth!.userId;
+    const projectId = req.params.projectId as string;
+
+    if (!projectId) {
+      throw badRequest("Project ID is required");
+    }
+
+    const project = await this.projectService.getProjectById(projectId, userId);
+
+    if (!project) {
+      throw notFound("Project not found");
+    }
+
+    const html = await compileSandbox(projectId);
+    res.type("html").send(html);
   }
 
   async createProject(req: Request, res: Response): Promise<void> {

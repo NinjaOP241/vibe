@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import {
   FileCollection,
+  compileSandboxCheck,
   readSandboxFiles,
   runSandboxCommand,
   writeSandboxFiles,
@@ -90,10 +91,26 @@ export function createBuilderTools(
     },
   );
 
+  const compilePreviewTool = tool(
+    async () => compileSandboxCheck(sandboxId),
+    {
+      name: "compilePreview",
+      description:
+        "Compile the sandbox preview. Always run this after writing files and fix any reported errors before finishing.",
+      schema: z.object({}),
+    },
+  );
+
   return {
     terminalTool,
     readFilesTool,
     createOrUpdateFilesTool,
-    tools: [terminalTool, readFilesTool, createOrUpdateFilesTool],
+    compilePreviewTool,
+    tools: [
+      terminalTool,
+      readFilesTool,
+      createOrUpdateFilesTool,
+      compilePreviewTool,
+    ],
   };
 }

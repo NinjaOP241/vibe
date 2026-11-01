@@ -6,7 +6,7 @@ import { getChatModel } from "../../lib/model.js";
 import type { BuilderInput, BuilderResult } from "../types.js";
 import { createBuilderTools } from "./tools.js";
 import { BUILDER_PROMPT } from "./prompt.js";
-import { FileCollection } from "../../lib/sandbox.js";
+import { compileSandboxCheck, FileCollection } from "../../lib/sandbox.js";
 import {
   isRecursionLimitExceeded,
   lastAssistantText,
@@ -17,16 +17,25 @@ import { appendAgentMessage } from "../shared/handoff.js";
 export async function runBuilder(input: BuilderInput): Promise<BuilderResult> {
   const files: FileCollection = { ...input.files };
 
-  const { terminalTool, readFilesTool, createOrUpdateFilesTool } =
-    createBuilderTools(input.sandboxId, input.files, () =>
-      input.onProgress?.(),
-    );
+  const {
+    terminalTool,
+    readFilesTool,
+    createOrUpdateFilesTool,
+    compilePreviewTool,
+  } = createBuilderTools(input.sandboxId, input.files, () =>
+    input.onProgress?.(),
+  );
 
   // Create the builder agent
   const agent = createAgent({
     name: "builder",
     model: getChatModel(env.GEMINI_BUILDER_MODEL),
-    tools: [terminalTool, readFilesTool, createOrUpdateFilesTool],
+    tools: [
+      terminalTool,
+      readFilesTool,
+      createOrUpdateFilesTool,
+      compilePreviewTool,
+    ],
     systemPrompt: BUILDER_PROMPT,
     version: "v1",
     signal: input.signal,
@@ -54,7 +63,7 @@ export async function runBuilder(input: BuilderInput): Promise<BuilderResult> {
   try {
     const stream = await agent.stream(agentInput, {
       streamMode: "values",
-      recursionLimit: 16,
+      recursionLimit: 64,
     });
 
     const result = await streamAgentValues(stream, {
@@ -67,6 +76,13 @@ export async function runBuilder(input: BuilderInput): Promise<BuilderResult> {
       throw error;
     }
     input.onProgress?.();
+  }
+
+  const previewStatus = await compileSandboxCheck(input.sandboxId);
+  if (!previewStatus.startsWith("SUCCESS:")) {
+    throw new Error(
+      `Builder finished without a valid preview bundle.\n${previewStatus}`,
+    );
   }
 
   const notes =
