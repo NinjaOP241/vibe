@@ -2,8 +2,8 @@ import { ApplicationFailure } from "@temporalio/common";
 
 import { projectService } from "../../container.js";
 import {
-  ensureSandbox,
   FileCollection,
+  provisionProjectSandbox,
   readSandboxTree,
 } from "../../lib/sandbox.js";
 
@@ -24,13 +24,13 @@ export async function createSandbox(input: {
     throw ApplicationFailure.nonRetryable("Project not found or access denied");
   }
 
-  // DUMMY implementation for now, just ensure the sandbox exists
-  await ensureSandbox(input.projectId);
-  return input.projectId; // Return a dummy sandboxId
+  await provisionProjectSandbox(input.projectId, input.userId);
+  return input.projectId;
 }
 
 export async function loadSandboxFiles(
   sandboxId: string,
+  userId: string,
 ): Promise<FileCollection> {
-  return readSandboxTree(sandboxId);
+  return readSandboxTree(sandboxId, userId);
 }

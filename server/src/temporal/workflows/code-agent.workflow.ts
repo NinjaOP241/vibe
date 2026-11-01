@@ -33,7 +33,7 @@ export async function pingWorkflow(name: string): Promise<string> {
 
 export async function codeAgentWorkflow(input: CodeAgentInput) {
   // Create a sandbox for the project
-  const sandboxId = await createSandbox({
+  await createSandbox({
     projectId: input.projectId,
     userId: input.userId,
   });

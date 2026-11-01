@@ -12,5 +12,10 @@ export interface IProjectService {
 
   getProjectById(projectId: string, userId: string): Promise<Project | null>;
 
+  updateProjectE2BSandboxId(
+    projectId: string,
+    e2bSandboxId: string,
+  ): Promise<Project | null>;
+
   createProject(input: CreateProjectInput): Promise<ProjectWithMessages>;
 }

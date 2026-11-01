@@ -26,6 +26,16 @@ export class ProjectService implements IProjectService {
     return this.projectRepository.findById(projectId, userId);
   }
 
+  async updateProjectE2BSandboxId(
+    projectId: string,
+    e2bSandboxId: string,
+  ): Promise<Project | null> {
+    return this.projectRepository.updateProjectE2BSandboxId(
+      projectId,
+      e2bSandboxId,
+    );
+  }
+
   async createProject(input: CreateProjectInput): Promise<ProjectWithMessages> {
     // Generate a random slug for the project name
     const name = generateSlug(3, { format: "kebab" });

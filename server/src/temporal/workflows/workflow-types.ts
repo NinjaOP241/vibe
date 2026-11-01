@@ -15,6 +15,7 @@ export interface WorkflowPipelineState {
 
 export interface AgentBasePayload {
   projectId: string;
+  userId: string;
   sandboxId: string;
   prompt: string;
   state: WorkflowPipelineState;
@@ -46,6 +47,8 @@ export function createAgentBasePayload(
 ): AgentBasePayload {
   return {
     projectId: input.projectId,
+    userId: input.userId,
+    // Sandbox helpers accept the project ID and resolve the stored E2B ID.
     sandboxId: input.projectId,
     prompt: input.prompt,
     state,

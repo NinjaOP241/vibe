@@ -19,11 +19,12 @@ const sandboxFileSchema = z.object({
 
 export function createBuilderTools(
   sandboxId: string,
+  userId: string,
   files: FileCollection,
   onWrite: () => void,
 ) {
   const terminalTool = tool(
-    async ({ command }) => runSandboxCommand(sandboxId, command),
+    async ({ command }) => runSandboxCommand(sandboxId, command, userId),
     {
       name: "terminal",
       description:
@@ -37,7 +38,7 @@ export function createBuilderTools(
   const readFilesTool = tool(
     async ({ paths }) => {
       try {
-        const files = await readSandboxFiles(sandboxId, paths);
+        const files = await readSandboxFiles(sandboxId, paths, userId);
         return files
           .map(
             ({ path: filePath, content }) => `=== ${filePath} ===\n${content}`,
@@ -69,7 +70,7 @@ export function createBuilderTools(
           batch[filePath] = content;
           files[filePath] = content;
         }
-        await writeSandboxFiles(sandboxId, batch);
+        await writeSandboxFiles(sandboxId, batch, userId);
         onWrite();
         const paths = updates.map(({ path: filePath }) => filePath);
         return `Wrote ${paths.length} file(s): ${paths.join(", ")}`;
@@ -92,7 +93,7 @@ export function createBuilderTools(
   );
 
   const compilePreviewTool = tool(
-    async () => compileSandboxCheck(sandboxId),
+    async () => compileSandboxCheck(sandboxId, userId),
     {
       name: "compilePreview",
       description:

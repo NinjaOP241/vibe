@@ -1,33 +1,58 @@
 /**
- * Provides utilities for managing project sandbox directories, including
- * path validation, directory creation, file reading and writing, command
- * execution, and recursive collection of project files.
+ * E2B-backed project sandbox utilities.
  *
- * Commands are executed with the sandbox directory as their working directory.
+ * A Project stores the E2B sandbox ID in the database. Every operation first
+ * resolves the project through projectService, so callers cannot operate on a
+ * project that does not belong to their user.
  */
 
-import { exec, type ExecException } from "child_process";
-import * as esbuild from "esbuild";
-import path from "path";
+import { FileType, Sandbox } from "e2b";
 import fs from "fs/promises";
-import type { Dirent } from "fs";
-import { sandboxRoot } from "../config/sandbox.js";
-import { promisify } from "util";
+import path from "path";
 
-const serverNodeModules = path.resolve(__dirname, "../../node_modules");
+import { notFound } from "../utils/api-error.js";
+import { projectService } from "../container.js";
 
-const PREVIEW_ENTRY_CANDIDATES = [
-  "src/App.tsx",
-  "src/App.jsx",
-  "app/page.tsx",
-  "src/app/page.tsx",
-  "App.tsx",
-  "App.jsx",
-  "src/main.tsx",
-  "main.tsx",
-] as const;
+/** Root directory used by generated applications inside every E2B sandbox. */
+export const SANDBOX_WORKDIR = "/home/user/app";
 
-const PREVIEW_BOOTSTRAP_FILE = ".preview-bootstrap.tsx";
+/** Compile script copied into each E2B sandbox during provisioning. */
+const COMPILE_SCRIPT_NAME = ".lovable-compile.mjs";
+
+/** Backend-side location of the compile script that is copied to E2B. */
+const COMPILE_SCRIPT_SOURCE_PATH = path.resolve(
+  __dirname,
+  "../../scripts/sandbox-compile-preview.mjs",
+);
+
+/** HTML file written by the compile script and returned by the preview API. */
+const PREVIEW_OUTPUT_HTML = ".preview-output.html";
+
+/** Maximum time allowed for a preview compilation. */
+const COMPILE_SCRIPT_TIMEOUT_MS = 120_000;
+
+/** Maximum time allowed for an arbitrary builder command. */
+const SANDBOX_COMMAND_TIMEOUT_MS = 60_000;
+
+const SKIP_DIRS = new Set([
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  "target",
+  "tmp",
+  "temp",
+  "cache",
+  ".git",
+]);
+
+const SKIP_FILES = new Set([
+  "package-lock.json",
+  "yarn.lock",
+  "pnpm-lock.yaml",
+]);
+
+const MAX_TRACKED_BYTE_SIZE = 10 * 1024 * 1024;
 
 /**
  * This is a TypeScript type that represents a collection of files.
@@ -61,55 +86,6 @@ export type SandboxFileContent = {
 };
 
 /**
- * Checks whether targetPath stays inside root.
- *
- * Why do we need this?
- * A project should not be able to access files outside
- * its permitted directory through a manipulated file path.
- *
- * Example:
- * root       = "C:\Projects\lovable-clone\data\sandbox\project_123"
- * targetPath = "C:\Projects\lovable-clone\data\sandbox\project_123\src\App.tsx"
- * Result: allowed.
- *
- * But a path pointing to another project's directory is rejected.
- *
- */
-function assertPathInsideRoot(
-  root: string,
-  targetPath: string,
-  errorMessage = "Invalid path",
-): void {
-  // Calculate the path needed to reach targetPath from root.
-  const relativePath = path.relative(root, targetPath);
-
-  // A path beginning with ".." escapes the root.
-  // An absolute relativePath is also rejected defensively.
-  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-    throw new Error(errorMessage);
-  }
-}
-
-/**
- * Checks whether a sandbox directory is inside sandboxRoot.
- *
- * This is a specialized wrapper around assertPathInsideRoot().
- * It supplies the common root and a sandbox-specific error message.
- *
- * Example:
- * sandboxRoot = "C:\Projects\lovable-clone\data\sandbox"
- * sandboxPath = "C:\Projects\lovable-clone\data\sandbox\project_123"
- * Result: allowed.
- */
-function assertSandboxPathInsideRoot(sandboxPath: string): void {
-  assertPathInsideRoot(
-    sandboxRoot,
-    sandboxPath,
-    "Sandbox path is outside the root directory",
-  );
-}
-
-/**
  * Cleans a user-supplied relative file path.
  *
  * Why?
@@ -125,294 +101,283 @@ function assertSandboxPathInsideRoot(sandboxPath: string): void {
  * guarantee security; the resolved path must also be validated.
  */
 function sanitizeSandboxRelativePath(relativePath: string): string {
-  // Remove leading forward or backward slashes.
-  const withoutLeadingSlashes = relativePath.replace(/^[/\\]+/, "");
-
-  // Normalize separators, split into segments, and remove empties.
-  const segments = withoutLeadingSlashes
+  const segments = relativePath
+    .replace(/^[/\\]+/, "")
     .replace(/\\/g, "/")
     .split("/")
-    .filter((segment) => segment.length > 0);
+    .filter(
+      (segment) => segment.length > 0 && segment !== "." && segment !== "..",
+    );
 
-  const safeSegments: string[] = [];
-
-  for (const segment of segments) {
-    // Ignore current-directory and parent-directory segments.
-    if (segment === "." || segment === "..") {
-      continue;
-    }
-
-    safeSegments.push(segment);
-  }
-
-  // Rebuild the path using the current operating system's separator.
-  const cleaned = safeSegments.join(path.sep);
-
-  // Reject paths that become empty after cleaning.
-  if (!cleaned) {
+  const cleanedPath = segments.join("/");
+  if (!cleanedPath) {
     throw new Error("Invalid file path");
   }
 
-  return cleaned;
+  return cleanedPath;
 }
 
 /**
- * Converts a relative file path into an absolute path
- * and checks that it stays inside the specified project.
+ * Converts a project-relative path to an absolute Linux path inside E2B.
  *
  * Example:
- * sandboxDir   = "C:\Projects\lovable-clone\data\sandbox\project_123"
  * relativePath = "src/App.tsx"
+ * result       = "/home/user/app/src/App.tsx"
  *
- * Returns:
- * cleanedPath = "src\App.tsx"
- * filePath    = "C:\Projects\lovable-clone\data\sandbox\project_123\src\App.tsx"
- *
- * cleanedPath is useful for identifying the file.
- * filePath is used for filesystem operations.
+ * The relative-path check prevents a path from escaping SANDBOX_WORKDIR.
  */
-function resolveSandboxFilePath(
-  sandboxDir: string,
-  relativePath: string,
-): { cleanedPath: string; filePath: string } {
-  // Step 1: Normalize the relative path.
+export function toSandboxAbsolute(relativePath: string): string {
   const cleanedPath = sanitizeSandboxRelativePath(relativePath);
+  const absolutePath = path.posix.join(SANDBOX_WORKDIR, cleanedPath);
+  const relativeToWorkdir = path.posix.relative(SANDBOX_WORKDIR, absolutePath);
 
-  // Step 2: Construct the absolute filesystem path.
-  const filePath = path.resolve(sandboxDir, cleanedPath);
-
-  // Step 3: Ensure the file belongs to this specific project
-  assertPathInsideRoot(
-    sandboxDir,
-    filePath,
-    `Unsafe file path: ${relativePath}`,
-  );
-
-  // Return both representations for different use cases.
-  return { cleanedPath, filePath };
-}
-
-/**
- * Converts a sandbox ID into its absolute project directory.
- *
- * Example:
- * sandboxRoot = "C:\Projects\lovable-clone\data\sandbox"
- * sandboxId   = "project_123"
- *
- * Result:
- * "C:\Projects\lovable-clone\data\sandbox\project_123"
- *
- * This function calculates and validates the path.
- * It does not create the directory.
- */
-function resolveSandboxDir(sandboxId: string): string {
-  // A sandbox ID should be an identifier, not an arbitrary path.
-  if (!sandboxId || sandboxId.includes("..") || path.isAbsolute(sandboxId)) {
-    throw new Error("Invalid sandbox ID");
+  if (
+    relativeToWorkdir.startsWith("..") ||
+    path.posix.isAbsolute(relativeToWorkdir)
+  ) {
+    throw new Error(`Unsafe sandbox path: ${relativePath}`);
   }
 
-  // Construct the project's absolute directory.
-  const sandboxDir = path.resolve(sandboxRoot, sandboxId);
-
-  // Verify that the directory remains inside sandboxRoot.
-  assertSandboxPathInsideRoot(sandboxDir);
-
-  return sandboxDir;
+  return absolutePath;
 }
 
 /**
- * Ensures that a project's directory exists.
+ * Returns both the normalized project path and its E2B absolute path.
  *
- * If it doesn't exist, create it.
- * If it already exists, leave it in place.
- *
- * Returns the absolute directory path.
+ * Keeping both values avoids reconstructing the relative path after a file
+ * operation and gives callers a consistent response shape.
  */
-export async function ensureSandbox(sandboxId: string): Promise<string> {
-  // Find and validate the project's directory.
-  const sandboxPath = resolveSandboxDir(sandboxId);
-
-  // Create the directory and any missing parent directories.
-  await fs.mkdir(sandboxPath, { recursive: true });
-
-  return sandboxPath;
+function resolveE2bSandboxPath(relativePath: string): {
+  cleanedPath: string;
+  absolutePath: string;
+} {
+  const cleanedPath = sanitizeSandboxRelativePath(relativePath);
+  return {
+    cleanedPath,
+    absolutePath: toSandboxAbsolute(cleanedPath),
+  };
 }
 
 /**
- * Writes multiple files into a project's directory.
+ * Creates or reuses the E2B sandbox for a project and returns its ID.
  *
- * Example input:
- * {
- *   "package.json": "{\"name\":\"my-app\"}",
- *   "src/App.tsx": "export default function App() {...}"
- * }
+ * Existing projects reuse their stored sandbox. New projects receive a
+ * sandbox, whose ID is persisted through the project service before use.
+ */
+export async function provisionProjectSandbox(
+  projectId: string,
+  userId: string,
+): Promise<string> {
+  const project = await projectService.getProjectById(projectId, userId);
+
+  if (!project) {
+    throw notFound("Project not found");
+  }
+
+  if (project.e2bSandboxId) {
+    const sandbox = await Sandbox.connect(project.e2bSandboxId);
+    await ensureSandboxReady(sandbox);
+    return project.e2bSandboxId;
+  }
+
+  const sandbox = await Sandbox.create({
+    metadata: { projectId },
+  });
+
+  const updatedProject = await projectService.updateProjectE2BSandboxId(
+    projectId,
+    sandbox.sandboxId,
+  );
+
+  if (!updatedProject?.e2bSandboxId) {
+    throw new Error("Project sandbox ID was not saved");
+  }
+
+  await bootstrapSandbox(sandbox);
+  return updatedProject.e2bSandboxId;
+}
+
+/**
+ * Connects to a project's E2B sandbox and makes sure its bootstrap files and
+ * dependencies are available before the caller starts using it.
+ */
+async function connectE2bSandbox(
+  projectId: string,
+  userId: string,
+): Promise<Sandbox> {
+  const e2bSandboxId = await provisionProjectSandbox(projectId, userId);
+  const sandbox = await Sandbox.connect(e2bSandboxId);
+  await ensureSandboxReady(sandbox);
+  return sandbox;
+}
+
+/**
+ * Checks whether a sandbox has already been bootstrapped.
  *
- * The function creates required directories and writes each file.
- * Existing files with the same paths have their contents replaced.
+ * Reading the compile script is a lightweight readiness check. If the read
+ * fails because the sandbox is new or incomplete, bootstrapSandbox repairs it.
+ */
+async function ensureSandboxReady(sandbox: Sandbox): Promise<void> {
+  const compileScriptPath = `${SANDBOX_WORKDIR}/${COMPILE_SCRIPT_NAME}`;
+
+  try {
+    await sandbox.files.read(compileScriptPath);
+  } catch {
+    await bootstrapSandbox(sandbox);
+  }
+}
+
+/**
+ * Runs a command inside E2B and throws useful command output on failure.
+ */
+async function runE2bSandboxCommand(
+  sandbox: Sandbox,
+  command: string,
+  options?: { cwd?: string; requestTimeoutMs?: number },
+): Promise<void> {
+  const result = await sandbox.commands.run(command, {
+    cwd: options?.cwd,
+    requestTimeoutMs: options?.requestTimeoutMs,
+  });
+
+  if (result.exitCode !== 0) {
+    const detail = [result.error, result.stderr, result.stdout]
+      .filter((part) => part && part.trim().length > 0)
+      .join("\n");
+
+    throw new Error(
+      `Sandbox command failed (exit ${result.exitCode}): ${command}${
+        detail ? `\n${detail}` : ""
+      }`,
+    );
+  }
+}
+
+/**
+ * Initializes the E2B project directory, installs runtime dependencies, and
+ * copies the preview compiler into the sandbox.
+ */
+export async function bootstrapSandbox(sandbox: Sandbox): Promise<void> {
+  await runE2bSandboxCommand(sandbox, `mkdir -p ${SANDBOX_WORKDIR}`);
+
+  const compileScriptSource = await fs.readFile(
+    COMPILE_SCRIPT_SOURCE_PATH,
+    "utf8",
+  );
+  await sandbox.files.write(
+    `${SANDBOX_WORKDIR}/${COMPILE_SCRIPT_NAME}`,
+    compileScriptSource,
+  );
+
+  await runE2bSandboxCommand(sandbox, "npm init -y", {
+    cwd: SANDBOX_WORKDIR,
+  });
+  await runE2bSandboxCommand(
+    sandbox,
+    "npm install react react-dom esbuild lucide-react --yes",
+    {
+      cwd: SANDBOX_WORKDIR,
+      requestTimeoutMs: 300_000,
+    },
+  );
+}
+
+/**
+ * Writes generated project files to the E2B sandbox.
  *
- * Returns the project's absolute directory.
+ * Each parent directory is created before its file is uploaded. All paths are
+ * validated against SANDBOX_WORKDIR before any E2B filesystem call.
  */
 export async function writeSandboxFiles(
   sandboxId: string,
   fileCollection: FileCollection,
+  userId: string,
 ): Promise<string> {
-  // Ensure the project directory exists before writing.
-  const sandboxDir = await ensureSandbox(sandboxId);
+  const sandbox = await connectE2bSandbox(sandboxId, userId);
 
-  // Process all supplied files concurrently.
   await Promise.all(
     Object.entries(fileCollection).map(async ([relativePath, content]) => {
-      // Calculate and validate the full path for this file.
-      const { filePath } = resolveSandboxFilePath(sandboxDir, relativePath);
-
-      // Create the file's parent directory if necessary.
-      // For "src/App.tsx", this creates the "src" directory.
-      await fs.mkdir(path.dirname(filePath), {
-        recursive: true,
-      });
-
-      // Write the supplied content as text.
-      await fs.writeFile(filePath, content, "utf-8");
+      const { absolutePath } = resolveE2bSandboxPath(relativePath);
+      await runE2bSandboxCommand(
+        sandbox,
+        `mkdir -p ${JSON.stringify(path.posix.dirname(absolutePath))}`,
+      );
+      await sandbox.files.write(absolutePath, content);
     }),
   );
 
-  return sandboxDir;
+  return SANDBOX_WORKDIR;
 }
 
 /**
- * Reads specific files from an existing project.
- *
- * Example:
- * readSandboxFiles("project_123", [
- *   "src/App.tsx",
- *   "package.json"
- * ]);
- *
- * Returns an array containing each file's relative path
- * and its content.
- *
- * If a requested file is missing or unreadable, the promise rejects.
+ * Reads selected project files from E2B and returns their relative paths.
  */
 export async function readSandboxFiles(
   sandboxId: string,
   relativePaths: string[],
+  userId: string,
 ): Promise<SandboxFileContent[]> {
-  // Resolve the project directory without creating it.
-  const sandboxDir = resolveSandboxDir(sandboxId);
+  const sandbox = await connectE2bSandbox(sandboxId, userId);
 
-  // Read the requested files concurrently.
   return Promise.all(
     relativePaths.map(async (relativePath) => {
-      // Validate and resolve each requested file path.
-      const { cleanedPath, filePath } = resolveSandboxFilePath(
-        sandboxDir,
-        relativePath,
-      );
-
-      // Read the file as text.
-      const content = await fs.readFile(filePath, "utf-8");
-
-      // Return the relative path alongside its contents.
+      const { cleanedPath, absolutePath } = resolveE2bSandboxPath(relativePath);
+      const content = await sandbox.files.read(absolutePath);
       return { path: cleanedPath, content };
     }),
   );
 }
 
-const SKIP_DIRS = new Set([
-  "node_modules",
-  "dist",
-  "build",
-  "out",
-  "target",
-  "tmp",
-  "temp",
-  "cache",
-  ".git",
-]);
-const SKIP_FILES = new Set([
-  "package-lock.json",
-  "yarn.lock",
-  "pnpm-lock.yaml",
-]);
-
-// Maximum size of an individual file to include: 10 MiB, in bytes.
-const MAX_TRACKED_BYTE_SIZE = 1024 * 1024 * 10;
-
 /**
- * This function recursively traverses a project's directory tree and collects all eligible files.
+ * Recursively reads eligible project files from E2B.
+ *
+ * Dependency folders, build output, hidden files, lockfiles, and files over
+ * 10 MiB are skipped so the agent receives useful source files only.
  */
 export async function readSandboxTree(
   sandboxId: string,
+  userId: string,
 ): Promise<FileCollection> {
-  // Construct the project's absolute path and ensure it stays inside the allowed root.
-  const projectRoot = path.join(sandboxRoot, sandboxId);
-  assertSandboxPathInsideRoot(projectRoot);
-
-  // Collect each eligible file's relative path and content.
+  const sandbox = await connectE2bSandbox(sandboxId, userId);
   const files: FileCollection = {};
 
-  // Define a recursive function to traverse the directory tree.
-  const dfs = async (currentAbsolutePath: string): Promise<void> => {
-    // entries is an array of Dirent objects representing the contents of the current directory.
-    let entries: Dirent[];
-
+  const walk = async (currentDirectory: string): Promise<void> => {
+    let entries;
     try {
-      /**
-       * Get the files and the sub-directories in the current directory.
-       * fs.readdir() lists the contents of a directory on the filesystem.
-       *
-       * withFileTypes: true option tells fs.readdir() to return Dirent objects instead of just file names.
-       */
-      entries = await fs.readdir(currentAbsolutePath, { withFileTypes: true });
-    } catch (error) {
-      console.error(`Failed to read directory: ${currentAbsolutePath}`, error);
+      entries = await sandbox.files.list(currentDirectory);
+    } catch {
       return;
     }
 
     for (const entry of entries) {
-      // Ignore hidden files and directories, such as .env and .git.
       if (entry.name.startsWith(".")) continue;
 
-      const fullPath = path.join(currentAbsolutePath, entry.name);
-
-      if (entry.isDirectory()) {
-        if (!SKIP_DIRS.has(entry.name)) await dfs(fullPath);
+      const absolutePath = path.posix.join(currentDirectory, entry.name);
+      if (entry.type === FileType.DIR) {
+        if (!SKIP_DIRS.has(entry.name)) {
+          await walk(absolutePath);
+        }
         continue;
       }
 
-      if (!entry.isFile() || SKIP_FILES.has(entry.name)) continue;
+      if (entry.type !== FileType.FILE || SKIP_FILES.has(entry.name)) {
+        continue;
+      }
+      if (entry.size > MAX_TRACKED_BYTE_SIZE) continue;
 
       try {
-        const stats = await fs.stat(fullPath);
-        if (stats.size > MAX_TRACKED_BYTE_SIZE) {
-          console.warn(
-            `Skipping large file: ${fullPath} (${stats.size} bytes)`,
-          );
-          continue;
-        }
-
-        files[path.relative(projectRoot, fullPath)] = await fs.readFile(
-          fullPath,
-          {
-            encoding: "utf-8",
-          },
-        );
-      } catch (error) {
-        console.error(`Failed to get stats for file: ${fullPath}`, error);
+        const relativePath = path.posix.relative(SANDBOX_WORKDIR, absolutePath);
+        if (!relativePath || relativePath.startsWith("..")) continue;
+        files[relativePath] = await sandbox.files.read(absolutePath);
+      } catch {
+        // Continue walking when an individual file is unreadable or binary.
       }
     }
   };
 
-  // Start the DFS traversal from the sandbox's root directory.
-  await dfs(projectRoot);
-
+  await walk(SANDBOX_WORKDIR);
   return files;
 }
-
-const execAsync = promisify(exec);
-
-const SANDBOX_COMMAND_TIMEOUT_MS = 60_000;
-const SANDBOX_COMMAND_MAX_BUFFER = 1024 * 1024; // 1MB
 
 function formatCommandSuccess(stdout: string, stderr: string): string {
   const trimmedStdout = stdout.trim();
@@ -435,155 +400,100 @@ function formatCommandFailure(
   return parts.join("\n\n");
 }
 
-function asExecException(error: unknown): ExecException | null {
-  if (!(error instanceof Error)) return null;
-  if (!("stdout" in error || "stderr" in error)) return null;
-  return error as ExecException;
-}
-
+/**
+ * Runs an arbitrary builder command in the project's E2B working directory.
+ *
+ * The tool returns a formatted failure string instead of throwing so the
+ * language model can inspect the command output and repair the project.
+ */
 export async function runSandboxCommand(
   sandboxId: string,
   command: string,
+  userId: string,
 ): Promise<string> {
   try {
-    const sandboxDir = await ensureSandbox(sandboxId);
-    const { stdout, stderr } = await execAsync(command, {
-      cwd: sandboxDir,
-      timeout: SANDBOX_COMMAND_TIMEOUT_MS,
-      maxBuffer: SANDBOX_COMMAND_MAX_BUFFER,
+    const sandbox = await connectE2bSandbox(sandboxId, userId);
+    const result = await sandbox.commands.run(command, {
+      cwd: SANDBOX_WORKDIR,
+      requestTimeoutMs: SANDBOX_COMMAND_TIMEOUT_MS,
     });
-    return formatCommandSuccess(String(stdout), String(stderr));
-  } catch (error) {
-    const execError = asExecException(error);
-    if (execError) {
+
+    if (result.exitCode !== 0) {
       return formatCommandFailure(
-        execError.message,
-        String(execError.stdout ?? ""),
-        String(execError.stderr ?? ""),
+        result.error ?? `Command exited with code ${result.exitCode}`,
+        result.stdout,
+        result.stderr,
       );
     }
+
+    return formatCommandSuccess(result.stdout, result.stderr);
+  } catch (error) {
     return formatCommandFailure(
       error instanceof Error ? error.message : String(error),
     );
   }
 }
 
-async function findSandboxAppEntry(sandboxDir: string): Promise<string> {
-  for (const candidate of PREVIEW_ENTRY_CANDIDATES) {
-    try {
-      await fs.access(path.join(sandboxDir, candidate));
-      return candidate;
-    } catch {
-      continue;
-    }
+function compileScriptCommand(extraArgs = ""): string {
+  const scriptPath = `${SANDBOX_WORKDIR}/${COMPILE_SCRIPT_NAME}`;
+  return `node ${JSON.stringify(scriptPath)}${extraArgs ? ` ${extraArgs}` : ""}`;
+}
+
+async function runCompileScript(
+  sandbox: Sandbox,
+  extraArgs = "",
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return sandbox.commands.run(compileScriptCommand(extraArgs), {
+    cwd: SANDBOX_WORKDIR,
+    requestTimeoutMs: COMPILE_SCRIPT_TIMEOUT_MS,
+  });
+}
+
+/**
+ * Compiles the E2B project and returns the generated HTML document.
+ */
+export async function compileSandbox(
+  sandboxId: string,
+  userId: string,
+): Promise<string> {
+  const sandbox = await connectE2bSandbox(sandboxId, userId);
+  const result = await runCompileScript(sandbox);
+
+  if (result.exitCode !== 0) {
+    const detail = [result.stderr, result.stdout]
+      .filter((part) => part.trim().length > 0)
+      .join("\n");
+    throw new Error(
+      detail || `Preview compile failed with exit code ${result.exitCode}`,
+    );
   }
 
-  throw new Error(
-    `No preview entry found in sandbox. Tried: ${PREVIEW_ENTRY_CANDIDATES.join(", ")}`,
-  );
+  return sandbox.files.read(`${SANDBOX_WORKDIR}/${PREVIEW_OUTPUT_HTML}`);
 }
 
-function previewBootstrapSource(appEntryRelative: string): string {
-  const importPath = `./${appEntryRelative.replace(/\\/g, "/")}`;
-  return `import React from "react";
-import { createRoot } from "react-dom/client";
-import App from ${JSON.stringify(importPath)};
-
-const container = document.getElementById("root");
-if (container) {
-  createRoot(container).render(React.createElement(App));
-}
-`;
-}
-
-function previewHtmlDocument(script: string): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <title>Sandbox preview</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script>${script}</script>
-  </body>
-</html>
-`;
-}
-
-export async function compileSandbox(sandboxId: string): Promise<string> {
-  const sandboxDir = resolveSandboxDir(sandboxId);
-  await fs.mkdir(sandboxDir, { recursive: true });
-
-  const appEntry = await findSandboxAppEntry(sandboxDir);
-  const bootstrapPath = path.join(sandboxDir, PREVIEW_BOOTSTRAP_FILE);
-  const bootstrapSource = previewBootstrapSource(appEntry);
-
-  await fs.writeFile(bootstrapPath, bootstrapSource, "utf8");
-
+/**
+ * Performs the same compilation in check mode for the builder agent.
+ *
+ * The compile script intentionally exits with code 0 in --check mode even
+ * when compilation fails, so this function returns a model-readable status.
+ */
+export async function compileSandboxCheck(
+  sandboxId: string,
+  userId: string,
+): Promise<string> {
   try {
-    const result = await esbuild.build({
-      absWorkingDir: sandboxDir,
-      entryPoints: [bootstrapPath],
-      bundle: true,
-      format: "iife",
-      platform: "browser",
-      target: ["es2020"],
-      jsx: "automatic",
-      jsxImportSource: "react",
-      loader: {
-        ".tsx": "tsx",
-        ".ts": "ts",
-        ".jsx": "jsx",
-        ".js": "js",
-      },
-      nodePaths: [serverNodeModules],
-      define: {
-        "process.env.NODE_ENV": JSON.stringify("production"),
-      },
-      write: false,
-      logLevel: "silent",
-    });
+    const sandbox = await connectE2bSandbox(sandboxId, userId);
+    const result = await runCompileScript(sandbox, "--check");
+    const output = result.stdout.trim() || result.stderr.trim();
 
-    const output = result.outputFiles?.[0]?.text;
-    if (!output) {
-      throw new Error("esbuild produced no output");
+    if (output) return output;
+    if (result.exitCode !== 0) {
+      return `COMPILE FAILED:\nPreview compile exited with code ${result.exitCode}`;
     }
-
-    return previewHtmlDocument(output);
-  } finally {
-    await fs.unlink(bootstrapPath).catch(() => undefined);
-  }
-}
-
-function formatCompileError(error: unknown): string {
-  if (error && typeof error === "object" && "errors" in error) {
-    const failures = (error as esbuild.BuildFailure).errors;
-    if (failures.length > 0) {
-      return failures
-        .map((item) => {
-          const location = item.location;
-          const where = location
-            ? `${location.file}:${location.line}:${location.column}`
-            : "bundle";
-          return `${where}: ${item.text}`;
-        })
-        .join("\n");
-    }
-  }
-
-  return error instanceof Error ? error.message : String(error);
-}
-
-/** Same as preview compile; returns a short agent-facing status string (not HTML). */
-export async function compileSandboxCheck(sandboxId: string): Promise<string> {
-  try {
-    const html = await compileSandbox(sandboxId);
-    const kilobytes = Math.round(Buffer.byteLength(html, "utf8") / 1024);
-    return `SUCCESS: Preview bundle compiled (${kilobytes} KB HTML). No esbuild errors.`;
+    return "COMPILE FAILED:\nPreview compile produced no output";
   } catch (error) {
-    return `COMPILE FAILED:\n${formatCompileError(error)}`;
+    return `COMPILE FAILED:\n${
+      error instanceof Error ? error.message : String(error)
+    }`;
   }
 }

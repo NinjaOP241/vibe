@@ -22,7 +22,7 @@ export async function runBuilder(input: BuilderInput): Promise<BuilderResult> {
     readFilesTool,
     createOrUpdateFilesTool,
     compilePreviewTool,
-  } = createBuilderTools(input.sandboxId, input.files, () =>
+  } = createBuilderTools(input.sandboxId, input.userId, input.files, () =>
     input.onProgress?.(),
   );
 
@@ -78,7 +78,10 @@ export async function runBuilder(input: BuilderInput): Promise<BuilderResult> {
     input.onProgress?.();
   }
 
-  const previewStatus = await compileSandboxCheck(input.sandboxId);
+  const previewStatus = await compileSandboxCheck(
+    input.sandboxId,
+    input.userId,
+  );
   if (!previewStatus.startsWith("SUCCESS:")) {
     throw new Error(
       `Builder finished without a valid preview bundle.\n${previewStatus}`,

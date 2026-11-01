@@ -20,4 +20,9 @@ export interface IProjectRepository {
   createWithInitialMessage(
     input: CreateProjectWithInitialMessageInput,
   ): Promise<ProjectWithMessages>;
+
+  updateProjectE2BSandboxId(
+    projectId: string,
+    e2bSandboxId: string,
+  ): Promise<Project | null>;
 }

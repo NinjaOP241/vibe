@@ -42,6 +42,7 @@ export interface BuilderInput extends AgentRunHooks {
   todos: TodoItem[];
   thread: AgentChatMessage[];
   sandboxId: string;
+  userId: string;
   files: FileCollection;
   design: string;
   task: string;

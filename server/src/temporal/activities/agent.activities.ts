@@ -135,6 +135,7 @@ export async function runBuilderActivity(
 
     const result = await runBuilder({
       sandboxId: input.sandboxId,
+      userId: input.userId,
       task: input.task,
       design: input.state.design,
       files: input.state.files,

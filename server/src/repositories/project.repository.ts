@@ -53,4 +53,18 @@ export class ProjectRepository implements IProjectRepository {
       },
     });
   }
+
+  async updateProjectE2BSandboxId(
+    projectId: string,
+    e2bSandboxId: string,
+  ): Promise<Project | null> {
+    return this.prismaClient.project.update({
+      where: {
+        id: projectId,
+      },
+      data: {
+        e2bSandboxId,
+      },
+    });
+  }
 }

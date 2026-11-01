@@ -47,7 +47,7 @@ export class ProjectController {
       throw notFound("Project not found");
     }
 
-    const html = await compileSandbox(projectId);
+    const html = await compileSandbox(projectId, userId);
     res.type("html").send(html);
   }
 
